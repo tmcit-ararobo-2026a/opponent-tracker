@@ -1,0 +1,40 @@
+opponent_tracker_node:
+  ros__parameters:
+    input_topic: "/dynamic_points"
+    target_frame: "map"
+
+    clustering:
+      voxel_size: 0.08             # [m] Spatial hash voxel resolution
+      cluster_tolerance: 0.20      # [m] Euclidean clustering neighbor radius
+      min_cluster_size: 15         # Minimum points for valid opponent cluster
+      max_cluster_size: 10000      # Maximum points
+
+    robot:
+      min_width: 0.20              # [m] Min bounding box width
+      max_width: 1.30              # [m] Max bounding box width (Rule 3.2.2: 1200mm)
+      min_depth: 0.20              # [m] Min bounding box depth
+      max_depth: 1.30              # [m] Max bounding box depth (Rule 3.2.2: 1200mm)
+      min_height: 0.30             # [m] Min bounding box height
+      max_height: 2.20             # [m] Max bounding box height (Rule 3.2.2: 1800mm + bucket)
+      max_ground_z: 0.25           # [m] Floor grounding check in map frame
+
+    bucket:
+      min_z: 1.15                  # [m] Min mobile bucket height (Rule 3.2.3: 1200mm)
+      max_z: 2.15                  # [m] Max mobile bucket height (Rule 3.2.3: 2100mm)
+
+    field:
+      min_x: 0.0                   # [m] Robocon 2026 field bounds
+      max_x: 14.0
+      min_y: 0.0
+      max_y: 13.0
+
+    kalman:
+      process_noise_pos: 0.1       # Position process noise
+      process_noise_vel: 1.5       # Velocity process noise
+      process_noise_z: 0.05        # Bucket height process noise
+      measurement_noise_pos: 0.05  # LiDAR measurement noise
+      measurement_noise_z: 0.05    # Bucket height measurement noise
+      max_association_dist: 1.5    # [m] Association distance threshold
+      max_missed_frames: 10        # Frames before track loss
+      min_hits_to_confirm: 2       # Hits to confirm tracking
+
