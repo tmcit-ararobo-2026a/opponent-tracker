@@ -4,7 +4,7 @@
   <name>opponent_tracker</name>
   <version>0.1.0</version>
   <description>Fast C++17 opponent robot and mobile bucket tracking node for NHK Robocon 2026 (No PCL, pure Eigen3)</description>
-  <maintainer email="kamagata@tmcit.ac.jp">Akeru Kamagata</maintainer>
+  <maintainer email="robotics@tmcit.ac.jp">Robotics Club</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

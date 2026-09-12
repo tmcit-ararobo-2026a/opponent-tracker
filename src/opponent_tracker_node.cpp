@@ -28,6 +28,7 @@ OpponentTrackerNode::OpponentTrackerNode(const rclcpp::NodeOptions & options)
   pub_bucket_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/opponent_robot/bucket_target", 10);
   pub_velocity_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/opponent_robot/velocity", 10);
   pub_markers_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/opponent_robot/markers", 10);
+  pub_our_robot_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/our_robot/markers", 10);
 
   RCLCPP_INFO(this->get_logger(), "OpponentTrackerNode initialized. Listening to: %s", input_topic.c_str());
 }
@@ -53,20 +54,20 @@ void OpponentTrackerNode::initParameters()
   c_params.bucket_min_z = this->declare_parameter<float>("bucket.min_z", 1.15f);
   c_params.bucket_max_z = this->declare_parameter<float>("bucket.max_z", 2.15f);
 
-  c_params.field_min_x = this->declare_parameter<float>("field.min_x", 0.0f);
-  c_params.field_max_x = this->declare_parameter<float>("field.max_x", 14.0f);
-  c_params.field_min_y = this->declare_parameter<float>("field.min_y", 0.0f);
-  c_params.field_max_y = this->declare_parameter<float>("field.max_y", 13.0f);
+  c_params.field_min_x = this->declare_parameter<float>("field.min_x", -6.0f);
+  c_params.field_max_x = this->declare_parameter<float>("field.max_x", 6.0f);
+  c_params.field_min_y = this->declare_parameter<float>("field.min_y", -6.5f);
+  c_params.field_max_y = this->declare_parameter<float>("field.max_y", 6.5f);
 
   extractor_.setParams(c_params);
 
   TrackerParams t_params;
-  t_params.process_noise_pos = this->declare_parameter<float>("kalman.process_noise_pos", 0.1f);
-  t_params.process_noise_vel = this->declare_parameter<float>("kalman.process_noise_vel", 1.5f);
-  t_params.process_noise_z = this->declare_parameter<float>("kalman.process_noise_z", 0.05f);
-  t_params.measurement_noise_pos = this->declare_parameter<float>("kalman.measurement_noise_pos", 0.05f);
-  t_params.measurement_noise_z = this->declare_parameter<float>("kalman.measurement_noise_z", 0.05f);
-  t_params.max_association_dist = this->declare_parameter<float>("kalman.max_association_dist", 1.5f);
+  t_params.process_noise_pos = this->declare_parameter<float>("kalman.process_noise_pos", 2.0f);
+  t_params.process_noise_vel = this->declare_parameter<float>("kalman.process_noise_vel", 5.0f);
+  t_params.process_noise_z = this->declare_parameter<float>("kalman.process_noise_z", 0.20f);
+  t_params.measurement_noise_pos = this->declare_parameter<float>("kalman.measurement_noise_pos", 0.02f);
+  t_params.measurement_noise_z = this->declare_parameter<float>("kalman.measurement_noise_z", 0.02f);
+  t_params.max_association_dist = this->declare_parameter<float>("kalman.max_association_dist", 2.0f);
   t_params.max_missed_frames = this->declare_parameter<int>("kalman.max_missed_frames", 10);
   t_params.min_hits_to_confirm = this->declare_parameter<int>("kalman.min_hits_to_confirm", 2);
 
@@ -75,18 +76,17 @@ void OpponentTrackerNode::initParameters()
 
 void OpponentTrackerNode::initStaticObstacles()
 {
-  // Robocon 2026 standard static obstacles on the field
+  // Field CAD obstacles centered at (0,0)
   std::vector<StaticObstacle> static_obs = {
-    {"Box_B1", Eigen::Vector2f(2.0f, 3.0f), Eigen::Vector2f(0.5f, 0.5f), 0.0f, 0.5f},
-    {"Box_B2", Eigen::Vector2f(5.0f, 3.0f), Eigen::Vector2f(0.5f, 0.5f), 0.0f, 0.5f},
-    {"Box_B3", Eigen::Vector2f(8.0f, 3.0f), Eigen::Vector2f(0.5f, 0.5f), 0.0f, 0.5f},
-    {"Desk_A",  Eigen::Vector2f(3.0f, 8.0f), Eigen::Vector2f(1.2f, 0.6f), 0.0f, 0.75f},
-    {"Desk_B",  Eigen::Vector2f(7.0f, 8.0f), Eigen::Vector2f(1.2f, 0.6f), 0.0f, 0.75f},
-    {"Podium",  Eigen::Vector2f(10.0f, 6.0f), Eigen::Vector2f(0.8f, 0.8f), 0.0f, 0.4f},
-    {"Flag",    Eigen::Vector2f(1.0f, 10.0f), Eigen::Vector2f(0.3f, 0.3f), 0.0f, 1.8f}
+    {"CenterBarrier", Eigen::Vector2f(0.0f, 0.0f),    Eigen::Vector2f(10.5f, 0.6f), 0.0f, 0.25f},
+    {"Post_NW",       Eigen::Vector2f(-1.27f, 1.48f),  Eigen::Vector2f(0.35f, 0.35f), 0.0f, 0.65f},
+    {"Post_SW",       Eigen::Vector2f(-1.27f, -1.48f), Eigen::Vector2f(0.35f, 0.35f), 0.0f, 0.65f},
+    {"Post_NE",       Eigen::Vector2f(1.27f, 1.48f),   Eigen::Vector2f(0.35f, 0.35f), 0.0f, 0.65f},
+    {"Post_SE",       Eigen::Vector2f(1.27f, -1.48f),  Eigen::Vector2f(0.35f, 0.35f), 0.0f, 0.65f}
   };
 
   extractor_.setStaticObstacles(static_obs);
+  tracker_.setStaticObstacles(static_obs);
 }
 
 bool OpponentTrackerNode::parsePointCloud2(
@@ -152,7 +152,6 @@ bool OpponentTrackerNode::parsePointCloud2(
 
 void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg)
 {
-  RCLCPP_INFO(this->get_logger(), "Received pointcloud: %u x %u points, frame_id: %s", msg->width, msg->height, msg->header.frame_id.c_str());
   const rclcpp::Time current_stamp(msg->header.stamp);
 
   // Compute dt for Kalman prediction
@@ -181,8 +180,18 @@ void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2
     }
     catch (const tf2::TransformException & ex)
     {
-      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "TF lookup error: %s", ex.what());
-      return;
+      try
+      {
+        const auto tf_stamped = tf_buffer_->lookupTransform(
+          target_frame_, msg->header.frame_id, tf2::TimePointZero);
+        const Eigen::Isometry3d iso = tf2::transformToEigen(tf_stamped.transform);
+        transform_to_map = iso.cast<float>();
+      }
+      catch (const tf2::TransformException & ex2)
+      {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "TF lookup error: %s", ex2.what());
+        return;
+      }
     }
   }
 
@@ -195,7 +204,26 @@ void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2
   }
 
   // 3. Extract candidate clusters
-  std::vector<Cluster> clusters = extractor_.extractClusters(points_in_map);
+  std::vector<Cluster> raw_clusters = extractor_.extractClusters(points_in_map);
+  std::vector<Cluster> clusters;
+
+  // Filter out clusters too close to our own robot (< 0.9m) or in our own base corner
+  for (const auto & c : raw_clusters)
+  {
+    // Our robot is located at origin of base_link -> in map frame it is transform_to_map * (0,0,0)
+    const Eigen::Vector3f our_pos_map = transform_to_map.translation();
+    const float dist_to_us = (c.centroid.head<2>() - our_pos_map.head<2>()).norm();
+    if (dist_to_us < 0.90f)
+    {
+      continue; // Filter self robot reflections
+    }
+    // Robocon 2026: Opponent robot does not spawn inside our blue starting base (X < -2.5m, Y < -2.5m)
+    if (!tracker_.isTracking() && c.centroid.x() < -2.5f && c.centroid.y() < -2.5f)
+    {
+      continue;
+    }
+    clusters.push_back(c);
+  }
 
   // 4. Associate best cluster to Kalman Tracker
   tracker_.predict(dt);
@@ -229,7 +257,7 @@ void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2
     }
     else
     {
-      // Not tracking yet: pick highest confidence cluster
+      // Pick cluster with best robot geometry and bucket confidence in opponent area
       best_cluster = clusters[0];
       matched = true;
     }
@@ -237,19 +265,14 @@ void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2
 
   if (matched)
   {
-    tracker_.update(best_cluster.centroid, best_cluster.bucket_center);
-    RCLCPP_INFO(this->get_logger(), "Matched cluster at (%.2f, %.2f, %.2f), TrackerState: %d",
-      best_cluster.centroid.x(), best_cluster.centroid.y(), best_cluster.centroid.z(),
-      static_cast<int>(tracker_.getState()));
+    tracker_.update(best_cluster.centroid, best_cluster.bucket_center, best_cluster.bbox.dimensions);
   }
   else
   {
     tracker_.markMissed();
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-      "No matching opponent cluster found (Extracted clusters: %zu)", clusters.size());
   }
 
-  // 5. Publish tracking results if tracking or coasting
+  // 5. Publish tracking results if confirmed tracking
   if (tracker_.isTracking())
   {
     const Eigen::Vector2f pos = tracker_.getPosition();
@@ -293,18 +316,29 @@ void OpponentTrackerNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2
     // /opponent_robot/markers
     publishMarkers(current_stamp, matched ? best_cluster : Cluster{});
   }
+
+  // Always publish our own robot marker
+  publishOurRobotMarker(current_stamp);
 }
 
 void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Cluster & detected_cluster)
 {
+  (void)detected_cluster;
   visualization_msgs::msg::MarkerArray markers;
 
   const Eigen::Vector2f pos = tracker_.getPosition();
   const Eigen::Vector2f vel = tracker_.getVelocity();
   const Eigen::Vector3f bucket = tracker_.getBucketTarget();
   const float speed = tracker_.getSpeed();
+  const float heading = tracker_.getHeading();
 
-  // 1. Robot 3D Bounding Box
+  Eigen::Quaternionf q_heading(Eigen::AngleAxisf(heading, Eigen::Vector3f::UnitZ()));
+
+  // 1. Robot 3D Bounding Box (Rock-solid clean chassis box, no jitter or vertical stretching)
+  constexpr float ROBOT_WIDTH = 0.85f;
+  constexpr float ROBOT_DEPTH = 0.85f;
+  constexpr float ROBOT_HEIGHT = 1.05f;
+
   visualization_msgs::msg::Marker bbox_marker;
   bbox_marker.header.stamp = stamp;
   bbox_marker.header.frame_id = target_frame_;
@@ -312,34 +346,47 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
   bbox_marker.id = 0;
   bbox_marker.type = visualization_msgs::msg::Marker::CUBE;
   bbox_marker.action = visualization_msgs::msg::Marker::ADD;
-
-  if (detected_cluster.points.empty())
-  {
-    bbox_marker.pose.position.x = pos.x();
-    bbox_marker.pose.position.y = pos.y();
-    bbox_marker.pose.position.z = 0.6;
-    bbox_marker.scale.x = 0.9;
-    bbox_marker.scale.y = 0.9;
-    bbox_marker.scale.z = 1.2;
-  }
-  else
-  {
-    bbox_marker.pose.position.x = detected_cluster.bbox.center.x();
-    bbox_marker.pose.position.y = detected_cluster.bbox.center.y();
-    bbox_marker.pose.position.z = detected_cluster.bbox.center.z();
-    bbox_marker.scale.x = std::max(0.4f, detected_cluster.bbox.dimensions.x());
-    bbox_marker.scale.y = std::max(0.4f, detected_cluster.bbox.dimensions.y());
-    bbox_marker.scale.z = std::max(0.5f, detected_cluster.bbox.dimensions.z());
-  }
-  bbox_marker.pose.orientation.w = 1.0;
-
+  bbox_marker.pose.position.x = pos.x();
+  bbox_marker.pose.position.y = pos.y();
+  bbox_marker.pose.position.z = ROBOT_HEIGHT * 0.5f;
+  bbox_marker.pose.orientation.x = q_heading.x();
+  bbox_marker.pose.orientation.y = q_heading.y();
+  bbox_marker.pose.orientation.z = q_heading.z();
+  bbox_marker.pose.orientation.w = q_heading.w();
+  bbox_marker.scale.x = ROBOT_WIDTH;
+  bbox_marker.scale.y = ROBOT_DEPTH;
+  bbox_marker.scale.z = ROBOT_HEIGHT;
   bbox_marker.color.r = 1.0f;
-  bbox_marker.color.g = 0.1f;
-  bbox_marker.color.b = 0.1f;
-  bbox_marker.color.a = 0.45f;
+  bbox_marker.color.g = 0.15f;
+  bbox_marker.color.b = 0.15f;
+  bbox_marker.color.a = 0.70f;
   markers.markers.push_back(bbox_marker);
 
-  // 2. Mobile Bucket Cylinder Marker (100pt Highest Scoring Target)
+  // 2. Opponent Heading Direction Arrow
+  visualization_msgs::msg::Marker opp_head_marker;
+  opp_head_marker.header.stamp = stamp;
+  opp_head_marker.header.frame_id = target_frame_;
+  opp_head_marker.ns = "opponent_heading";
+  opp_head_marker.id = 5;
+  opp_head_marker.type = visualization_msgs::msg::Marker::ARROW;
+  opp_head_marker.action = visualization_msgs::msg::Marker::ADD;
+  opp_head_marker.pose.position.x = pos.x();
+  opp_head_marker.pose.position.y = pos.y();
+  opp_head_marker.pose.position.z = ROBOT_HEIGHT + 0.10f;
+  opp_head_marker.pose.orientation.x = q_heading.x();
+  opp_head_marker.pose.orientation.y = q_heading.y();
+  opp_head_marker.pose.orientation.z = q_heading.z();
+  opp_head_marker.pose.orientation.w = q_heading.w();
+  opp_head_marker.scale.x = 0.70;
+  opp_head_marker.scale.y = 0.10;
+  opp_head_marker.scale.z = 0.10;
+  opp_head_marker.color.r = 1.0f;
+  opp_head_marker.color.g = 0.4f;
+  opp_head_marker.color.b = 0.0f;
+  opp_head_marker.color.a = 0.95f;
+  markers.markers.push_back(opp_head_marker);
+
+  // 3. Mobile Bucket Cylinder Marker (100pt Target on top)
   visualization_msgs::msg::Marker bucket_marker;
   bucket_marker.header.stamp = stamp;
   bucket_marker.header.frame_id = target_frame_;
@@ -360,7 +407,7 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
   bucket_marker.color.a = 0.85f;
   markers.markers.push_back(bucket_marker);
 
-  // 3. Aiming Crosshair / Sphere
+  // 4. Bright Green Aiming Target Sphere & Reticle (Cloth Launcher Aiming Point)
   visualization_msgs::msg::Marker aim_marker;
   aim_marker.header.stamp = stamp;
   aim_marker.header.frame_id = target_frame_;
@@ -372,16 +419,36 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
   aim_marker.pose.position.y = bucket.y();
   aim_marker.pose.position.z = bucket.z() + 0.15;
   aim_marker.pose.orientation.w = 1.0;
-  aim_marker.scale.x = 0.15;
-  aim_marker.scale.y = 0.15;
-  aim_marker.scale.z = 0.15;
+  aim_marker.scale.x = 0.28;
+  aim_marker.scale.y = 0.28;
+  aim_marker.scale.z = 0.28;
   aim_marker.color.r = 0.0f;
   aim_marker.color.g = 1.0f;
   aim_marker.color.b = 0.2f;
   aim_marker.color.a = 0.95f;
   markers.markers.push_back(aim_marker);
 
-  // 4. Velocity Arrow
+  // 5. 100pt Target Text Label
+  visualization_msgs::msg::Marker target_label;
+  target_label.header.stamp = stamp;
+  target_label.header.frame_id = target_frame_;
+  target_label.ns = "target_crosshair";
+  target_label.id = 6;
+  target_label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  target_label.action = visualization_msgs::msg::Marker::ADD;
+  target_label.pose.position.x = bucket.x();
+  target_label.pose.position.y = bucket.y();
+  target_label.pose.position.z = bucket.z() + 0.35;
+  target_label.pose.orientation.w = 1.0;
+  target_label.scale.z = 0.28;
+  target_label.color.r = 0.1f;
+  target_label.color.g = 1.0f;
+  target_label.color.b = 0.1f;
+  target_label.color.a = 1.0f;
+  target_label.text = "[ 100pt BUCKET TARGET ]";
+  markers.markers.push_back(target_label);
+
+  // 6. Velocity Arrow
   if (speed > 0.1f)
   {
     visualization_msgs::msg::Marker vel_marker;
@@ -414,7 +481,7 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
     markers.markers.push_back(vel_marker);
   }
 
-  // 5. Status Text (HUD)
+  // 7. Status Text (HUD)
   visualization_msgs::msg::Marker text_marker;
   text_marker.header.stamp = stamp;
   text_marker.header.frame_id = target_frame_;
@@ -424,7 +491,7 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
   text_marker.action = visualization_msgs::msg::Marker::ADD;
   text_marker.pose.position.x = pos.x();
   text_marker.pose.position.y = pos.y();
-  text_marker.pose.position.z = bucket.z() + 0.45;
+  text_marker.pose.position.z = bucket.z() + 0.65;
   text_marker.pose.orientation.w = 1.0;
   text_marker.scale.z = 0.22;  // Text size
   text_marker.color.r = 1.0f;
@@ -438,6 +505,75 @@ void OpponentTrackerNode::publishMarkers(const rclcpp::Time & stamp, const Clust
   markers.markers.push_back(text_marker);
 
   pub_markers_->publish(markers);
+}
+
+void OpponentTrackerNode::publishOurRobotMarker(const rclcpp::Time & stamp)
+{
+  visualization_msgs::msg::MarkerArray markers;
+
+  // 1. Our Robot Chassis Box (in base_link frame)
+  visualization_msgs::msg::Marker body_marker;
+  body_marker.header.stamp = stamp;
+  body_marker.header.frame_id = "base_link";
+  body_marker.ns = "our_robot";
+  body_marker.id = 100;
+  body_marker.type = visualization_msgs::msg::Marker::CUBE;
+  body_marker.action = visualization_msgs::msg::Marker::ADD;
+  body_marker.pose.position.x = 0.0;
+  body_marker.pose.position.y = 0.0;
+  body_marker.pose.position.z = 0.25;
+  body_marker.pose.orientation.w = 1.0;
+  body_marker.scale.x = 0.75;
+  body_marker.scale.y = 0.75;
+  body_marker.scale.z = 0.50;
+  body_marker.color.r = 0.0f;
+  body_marker.color.g = 0.7f;
+  body_marker.color.b = 1.0f;
+  body_marker.color.a = 0.75f;
+  markers.markers.push_back(body_marker);
+
+  // 2. Heading Forward Arrow
+  visualization_msgs::msg::Marker head_marker;
+  head_marker.header.stamp = stamp;
+  head_marker.header.frame_id = "base_link";
+  head_marker.ns = "our_heading";
+  head_marker.id = 101;
+  head_marker.type = visualization_msgs::msg::Marker::ARROW;
+  head_marker.action = visualization_msgs::msg::Marker::ADD;
+  head_marker.pose.position.x = 0.0;
+  head_marker.pose.position.y = 0.0;
+  head_marker.pose.position.z = 0.55;
+  head_marker.pose.orientation.w = 1.0;
+  head_marker.scale.x = 0.60; // length
+  head_marker.scale.y = 0.08; // width
+  head_marker.scale.z = 0.08; // height
+  head_marker.color.r = 0.0f;
+  head_marker.color.g = 1.0f;
+  head_marker.color.b = 0.3f;
+  head_marker.color.a = 0.95f;
+  markers.markers.push_back(head_marker);
+
+  // 3. Name Label
+  visualization_msgs::msg::Marker name_marker;
+  name_marker.header.stamp = stamp;
+  name_marker.header.frame_id = "base_link";
+  name_marker.ns = "our_label";
+  name_marker.id = 102;
+  name_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  name_marker.action = visualization_msgs::msg::Marker::ADD;
+  name_marker.pose.position.x = 0.0;
+  name_marker.pose.position.y = 0.0;
+  name_marker.pose.position.z = 0.85;
+  name_marker.pose.orientation.w = 1.0;
+  name_marker.scale.z = 0.25;
+  name_marker.color.r = 0.2f;
+  name_marker.color.g = 0.9f;
+  name_marker.color.b = 1.0f;
+  name_marker.color.a = 1.0f;
+  name_marker.text = "OUR ROBOT (A-TEAM)";
+  markers.markers.push_back(name_marker);
+
+  pub_our_robot_->publish(markers);
 }
 
 }  // namespace opponent_tracker

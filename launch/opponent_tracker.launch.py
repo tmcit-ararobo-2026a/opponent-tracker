@@ -17,7 +17,7 @@ def generate_launch_description():
 
     input_topic_arg = DeclareLaunchArgument(
         'input_topic',
-        default_value='/dynamic_points',
+        default_value='/dynamic_cloud',
         description='Dynamic point cloud input topic'
     )
 

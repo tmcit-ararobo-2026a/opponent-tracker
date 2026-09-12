@@ -42,6 +42,9 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_bucket_;
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr pub_velocity_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_markers_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_our_robot_;
+
+  void publishOurRobotMarker(const rclcpp::Time & stamp);
 
   // TF2 Buffer & Listener
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
