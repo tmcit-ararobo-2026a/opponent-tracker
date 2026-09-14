@@ -153,6 +153,11 @@ opponent_tracker_node:
       min_y: -6.5                  # [m] フィールドY範囲
       max_y: 6.5
 
+    court:
+      opponent_side: "auto"        # 相手コート設定: "auto" (自機位置から自動判定), "side_a" (領域A), "side_b" (領域B)
+      court_y_divider: 0.0         # [m] コート境界Y座標
+      center_barrier_margin: 0.30  # [m] 中央教壇エリア除外マージン
+
     kalman:
       process_noise_pos: 2.0       # 位置プロセスノイズ
       process_noise_vel: 5.0       # 速度プロセスノイズ

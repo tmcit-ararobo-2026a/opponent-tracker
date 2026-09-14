@@ -103,21 +103,21 @@ class TestOpponentPointcloudFeeder(Node):
         t = time.time() - self.start_time
         now = self.get_clock().now()
 
-        # 1. Base TF for Our Robot (stationed at origin)
+        # 1. Base TF for Our Robot (stationed in Area B: x=0.0, y=-2.5m)
         t_msg = TransformStamped()
         t_msg.header.stamp = now.to_msg()
         t_msg.header.frame_id = "map"
         t_msg.child_frame_id = "base_link"
         t_msg.transform.translation.x = 0.0
-        t_msg.transform.translation.y = 0.0
+        t_msg.transform.translation.y = -2.5
         t_msg.transform.translation.z = 0.0
         t_msg.transform.rotation.w = 1.0
         self.tf_broadcaster.sendTransform(t_msg)
 
-        # 2. Opponent Robot Position along 360-degree test trajectory
+        # 2. Opponent Robot Position along trajectory inside Area A (Y > 0.8m)
         orbit_speed = 0.40 # rad/s (~15 sec per cycle)
-        opp_x = 2.8 * np.cos(orbit_speed * t)
-        opp_y = 2.5 * np.sin(orbit_speed * t)
+        opp_x = 2.5 * np.cos(orbit_speed * t)
+        opp_y = 2.8 + 1.2 * np.sin(orbit_speed * t) # Moving in [1.6m, 4.0m] in Area A
         bucket_z = 1.45
 
         # 3. Generate Dense Test Point Cloud for Opponent Robot + Bucket

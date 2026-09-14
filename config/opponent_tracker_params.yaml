@@ -28,6 +28,11 @@ opponent_tracker_node:
       min_y: -6.5
       max_y: 6.5
 
+    court:
+      opponent_side: "auto"        # "auto" (detect based on self robot position), "side_a" (Y > 0), "side_b" (Y < 0)
+      court_y_divider: 0.0         # [m] Center divider Y coordinate
+      center_barrier_margin: 0.30  # [m] Margin to exclude center podium/barrier points
+
     kalman:
       process_noise_pos: 2.0       # Position/Acceleration process noise (high agility)
       process_noise_vel: 5.0       # Velocity process noise
@@ -37,4 +42,5 @@ opponent_tracker_node:
       max_association_dist: 2.0    # [m] Association distance threshold
       max_missed_frames: 10        # Frames before track loss
       min_hits_to_confirm: 2       # Hits to confirm tracking
+      min_hits_to_confirm: 3       # Hits to confirm tracking (filters transient noise)
 
