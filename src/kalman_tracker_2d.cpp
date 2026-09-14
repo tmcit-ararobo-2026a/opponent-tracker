@@ -146,8 +146,6 @@ void KalmanTracker2D::update(
         P_.setIdentity();
         P_(0, 0) = params_.measurement_noise_pos;
         P_(1, 1) = params_.measurement_noise_pos;
-        P_(2, 2) = 1.0f;
-        P_(3, 3) = 1.0f;
         P_(2, 2) = 0.5f;  // Tighter initial velocity uncertainty to prevent sudden velocity jump
         P_(3, 3) = 0.5f;
         P_(4, 4) = params_.measurement_noise_z;
@@ -179,10 +177,6 @@ void KalmanTracker2D::update(
             return;
         }
     }
-
-    // Smooth dimensions using Exponential Moving Average (EMA)
-    constexpr float DIM_ALPHA = 0.85f;
-    smooth_dims_              = DIM_ALPHA * smooth_dims_ + (1.0f - DIM_ALPHA) * clamped_dims;
 
     // Measurement Vector z = [x_meas, y_meas, z_bucket_meas]^T (3x1)
     Eigen::Matrix<float, 3, 1> z;

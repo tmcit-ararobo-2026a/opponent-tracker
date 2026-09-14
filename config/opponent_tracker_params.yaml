@@ -41,6 +41,5 @@ opponent_tracker_node:
       measurement_noise_z: 0.02    # Bucket height measurement noise
       max_association_dist: 2.0    # [m] Association distance threshold
       max_missed_frames: 10        # Frames before track loss
-      min_hits_to_confirm: 2       # Hits to confirm tracking
       min_hits_to_confirm: 3       # Hits to confirm tracking (filters transient noise)
 
