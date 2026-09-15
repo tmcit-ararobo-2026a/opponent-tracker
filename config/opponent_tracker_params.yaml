@@ -2,6 +2,9 @@ opponent_tracker_node:
   ros__parameters:
     input_topic: "/dynamic_points"
     target_frame: "map"
+    opponent_frame_id: "opponent_robot"  # TF frame name for opponent robot chassis center
+    bucket_frame_id: "opponent_bucket"  # TF frame name for opponent mobile bucket
+    publish_tf: true                    # Publish TF transforms (/tf)
 
     clustering:
       voxel_size: 0.08             # [m] Spatial hash voxel resolution

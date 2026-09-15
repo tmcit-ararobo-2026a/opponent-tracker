@@ -15,8 +15,9 @@ OpponentTrackerNode::OpponentTrackerNode(const rclcpp::NodeOptions& options)
     initParameters();
     initStaticObstacles();
 
-    tf_buffer_   = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    tf_buffer_      = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_    = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     const std::string input_topic =
         this->declare_parameter<std::string>("input_topic", "/dynamic_points");
@@ -45,6 +46,10 @@ OpponentTrackerNode::OpponentTrackerNode(const rclcpp::NodeOptions& options)
 void OpponentTrackerNode::initParameters()
 {
     target_frame_ = this->declare_parameter<std::string>("target_frame", "map");
+    opponent_frame_id_ =
+        this->declare_parameter<std::string>("opponent_frame_id", "opponent_robot");
+    bucket_frame_id_ = this->declare_parameter<std::string>("bucket_frame_id", "opponent_bucket");
+    publish_tf_      = this->declare_parameter<bool>("publish_tf", true);
 
     ClusterParams c_params;
     c_params.voxel_size = this->declare_parameter<float>("clustering.voxel_size", 0.08f);
@@ -336,6 +341,35 @@ void OpponentTrackerNode::pointCloudCallback(
 
         // /opponent_robot/markers
         publishMarkers(current_stamp, matched ? best_cluster : Cluster{});
+
+        // Broadcast TF (map -> opponent_robot & map -> opponent_bucket)
+        if (publish_tf_ && tf_broadcaster_) {
+            geometry_msgs::msg::TransformStamped tf_opp;
+            tf_opp.header.stamp            = current_stamp;
+            tf_opp.header.frame_id         = target_frame_;
+            tf_opp.child_frame_id          = opponent_frame_id_;
+            tf_opp.transform.translation.x = pos.x();
+            tf_opp.transform.translation.y = pos.y();
+            tf_opp.transform.translation.z = 0.0;
+            tf_opp.transform.rotation.x    = q.x();
+            tf_opp.transform.rotation.y    = q.y();
+            tf_opp.transform.rotation.z    = q.z();
+            tf_opp.transform.rotation.w    = q.w();
+            tf_broadcaster_->sendTransform(tf_opp);
+
+            geometry_msgs::msg::TransformStamped tf_bkt;
+            tf_bkt.header.stamp            = current_stamp;
+            tf_bkt.header.frame_id         = target_frame_;
+            tf_bkt.child_frame_id          = bucket_frame_id_;
+            tf_bkt.transform.translation.x = bucket.x();
+            tf_bkt.transform.translation.y = bucket.y();
+            tf_bkt.transform.translation.z = bucket.z();
+            tf_bkt.transform.rotation.x    = 0.0;
+            tf_bkt.transform.rotation.y    = 0.0;
+            tf_bkt.transform.rotation.z    = 0.0;
+            tf_bkt.transform.rotation.w    = 1.0;
+            tf_broadcaster_->sendTransform(tf_bkt);
+        }
     }
 
     // Always publish our own robot marker

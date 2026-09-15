@@ -116,6 +116,12 @@ python3 src/opponent-tracker/test/test_feed_pointcloud.py
 | `/opponent_robot/markers` | `visualization_msgs/msg/MarkerArray` | 相手ロボット（赤色ソリッド枠）・バケツ（黄色円柱）の3D描画 |
 | `/our_robot/markers` | `visualization_msgs/msg/MarkerArray` | 自機ロボット（シアン色車体）・進行方向矢印 |
 
+### 配信TF (Broadcasted TF)
+| 親フレーム (Parent) | 子フレーム (Child) | 説明 |
+| :--- | :--- | :--- |
+| `map` | **`opponent_robot`** | **相手ロボットの車体中心**（マップ座標系での位置・向き） |
+| `map` | **`opponent_bucket`** | **相手移動バケツの中心頂点座標**（布射出機構用） |
+
 ---
 
 ## 7. パラメータ設定
